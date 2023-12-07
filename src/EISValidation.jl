@@ -1,5 +1,10 @@
-using Distributions,LinearAlgebra 
-using Plots, CSV, DataFrames
+module EISValidation
 
-include("LinearKK.jl")
-include("THD.jl")
+    export linearKK, summary_plot, save_valid_measurements
+
+    using Distributions,LinearAlgebra 
+    using Plots, CSV, DataFrames
+
+    include("LinearKK.jl")
+    include("THD.jl")
+end
