@@ -1,4 +1,6 @@
 name = "EISValidation"
+uuid = "ec500877-262d-41a7-97a8-55a4bdbbbfe3"
+authors = ["MaximeVH <maxime.vanhaeverbeke@gmail.com>"]
 version = "0.1.0"
 
 [deps]
