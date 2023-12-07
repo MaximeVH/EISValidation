@@ -73,20 +73,16 @@ function fit_ECM(measurements,ωs,M)
     A_real[:,1] .= 1
     A_imag = zeros(length(ωs),M+1)
     A_imag[:,1] .= 0
-
     for i in eachindex(ωs)
         for j in 1:M
             A_real[i,j+1] = real((1)/(1 + im*ωs[i]*taus[j]))
             A_imag[i,j+1] = imag((1)/(1 + im*ωs[i]*taus[j]))
         end
     end
-    
     Z_real  = real(measurements)
     Z_imag  = imag(measurements)
-    
     resistances_real = pinv(A_real'*A_real)*A_real'*Z_real
     resistances_imag = pinv(A_imag'*A_imag)*A_imag'*Z_imag
-
     return A_real * resistances_real .+ (A_imag * resistances_imag) .* im
 end
 
@@ -94,19 +90,15 @@ function get_resistances(measurements,ωs,M)
     taus = generate_time_constants(ωs,M)
     A_real = zeros(length(ωs),M+1)
     A_real[:,1] .= 1
-
     for i in eachindex(ωs)
         for j in 1:M
             A_real[i,j+1] = real((1)/(1 + im*ωs[i]*taus[j]))
         end
-    end
-    
+    end  
     Z_real  = real(measurements)
     resistances_real = pinv(A_real'*A_real)*A_real'*Z_real
-
     return resistances_real
 end
-
 
 function compute_μ(resistances)
    R_negatives = count(x->sign(x) == -1, resistances)
@@ -115,17 +107,65 @@ function compute_μ(resistances)
    return μ
 end
 
-function find_optimal_M(measurements,ωs,c = 0.85, max_M = 50)
-    @assert max_M > 4
+function find_optimal_M(measurements,ωs,c = 0.50, max_M = 50)
+    @assert 200 > max_M > 4
     @assert 0 < c < 1
-    μ = 1
-    M = 4
-    while (μ > c) && (M < 50)
-        M += 1
-        μ =  compute_μ(get_resistances(measurements,ωs,M))
-    end
-    return M, μ
+    μs = [compute_μ(get_resistances(measurements,ωs,M_)) for M_ in 4:max_M]
+    findlast(x-> x > 0.5, μs)
+    M_opt = findlast(x-> x > 0.5, mus)
+
+    return M_opt
 end
 
+function linearKK(measurements,frequencies,c = 0.5,max_M = 80) #Alternatively: path to csv file.
+    #output: real and imaginary residuals
+    measurements,frequencies = cut_inductance(measurements,frequencies) #remove inductive parts.
+    ωs = 2π*frequencies
+    M = find_optimal_M(measurements,ωs,c,max_M)
+    @info("$(M) RC-units were used to fit the measurements")
+    fitted_spectrum = fit_ECM(measurements,ωs,M)
+    realres, imres = ECM_residuals(measurements,fitted_spectrum)
+    return  measurements, frequencies, fitted_spectrum, realres, imres
+end
 
-    
+function summary_plot(measurements, frequencies, fitted_spectrum, realres, imres)
+    # Spectrum fit
+    specfit = scatter(real(measurements),-imag(measurements), label = "measured",markershape=:circle,markercolor=:white)
+    scatter!(real(fitted_spectrum),-imag(fitted_spectrum), label = "fitted",markershape=:cross,markersize=6)
+    xlabel!("Re(Z) [Ω]")
+    ylabel!("Im(Z) [Ω]")
+    title!("Measured and ECM fitted spectra")
+
+    # Residuals fit
+    res_plot = scatter(frequencies,realres .*100,label = "real residual",xaxis = :log, color = "blue", title="Residuals")
+    plot!(frequencies,realres .*100,label = nothing, color = "blue")
+    scatter!(frequencies,imres .*100,label = "imag residual", color = "red")
+    plot!(frequencies,imres .*100,label = nothing, color = "red")
+    ylims!(-2,2)
+    ylabel!("Residual [%]")
+    xlabel!("Frequency [Hz]")
+    title!("Residuals")
+
+    real_specfit = scatter(frequencies,real(measurements), label = "measured",markershape=:circle,markercolor=:white, xaxis = :log)
+    scatter!(frequencies,real(fitted_spectrum), label = "fitted",markershape=:cross,markersize=6,legend=false)
+    xlabel!("Frequency [Hz]")
+    ylabel!("Re(Z) [Ω]")
+
+    imag_specfit = scatter(frequencies,-imag(measurements), label = "measured",markershape=:circle,markercolor=:white, xaxis = :log)
+    scatter!(frequencies,-imag(fitted_spectrum), label = "fitted",markershape=:cross,markersize=6,legend=false)
+    xlabel!("Frequency [Hz]")
+    ylabel!("-Im(Z) [Ω]")
+    l = @layout [a{0.5w} grid(2,1); b{0.3h}]
+    summary_fig = plot(specfit,real_specfit,imag_specfit,res_plot, layout = l,size=(1000,800))
+    return summary_fig
+end
+
+function save_valid_measurements(path,measurements,frequencies,threshold = 1, c = 0.5,max_M = 80) #remove part of EIS measurements that doesn't comply with linKK
+    measurements, frequencies, fitted_spectrum, realres, imres = linearKK(measurements,frequencies,c,max_M)
+    thres = threshold*0.01
+    invalid_inds = findall((realres .> thres) .| (imres .> thres))
+    meas = measurements[setdiff(1:end, invalid_inds)]
+    freq = frequencies[setdiff(1:end, invalid_inds)]
+    df_valid = DataFrame(frequencies = freq, Real = real(meas), Imag = imag(meas))
+    CSV.write(path,df_valid)
+end
