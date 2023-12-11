@@ -1,3 +1,11 @@
+"""
+    cut_inductance(measurements,frequencies)
+
+Removes inductive loops in the beginning or end of impedance spectra. 
+
+Inputs : a set of complex-valued impedance values and their corresponding frequencies.
+Outputs: the non-inductive parts of the impedance measurements and frequencies.
+ """
 function cut_inductance(measurements,frequencies)
     positive_index = findfirst(x -> x < 0, imag(measurements))
     if !isnothing(positive_index)
@@ -115,7 +123,18 @@ function find_optimal_M(measurements,ωs,c = 0.50, max_M = 50)
     return M_opt
 end
 
-function linearKK(measurements,frequencies,c = 0.5,max_M = 80) #Alternatively: path to csv file.
+"""
+    linearKK(measurements,frequencies;c = 0.5,max_M = 80)
+
+Conduct a linear Kramers-Kronig evaluation for the validation of impedance spectroscopy measurements.
+The essential inputs are a set of frequencies and the impedance measurements conducted at those frequencies.
+There are also two of keyword arguments to fine-tune the calculation. 
+
+## Keyword arguments
+- `c::Float64=0.5`: Hyperparameter for automatic number of RC-elements determination. Lower values of c promote a higher number of RC elements. 
+- `max_M::Int64=80`: Hyperparameter limiting the possible number of RC-elements of the Voigt circuit model.
+ """
+function linearKK(measurements,frequencies;c = 0.5,max_M = 80) #Alternatively: path to csv file.
     #output: real and imaginary residuals
     measurements,frequencies = cut_inductance(measurements,frequencies) #remove inductive parts.
     ωs = 2π*frequencies
@@ -126,6 +145,17 @@ function linearKK(measurements,frequencies,c = 0.5,max_M = 80) #Alternatively: p
     return  measurements, frequencies, fitted_spectrum, realres, imres
 end
 
+"""
+    linearKK(path;c = 0.5,max_M = 80)
+
+Conduct a linear Kramers-Kronig evaluation for the validation of impedance spectroscopy measurements.
+The essential inputs are the path to a set of frequencies and the impedance measurements conducted at those frequencies.
+There are also two of keyword arguments to fine-tune the calculation. 
+
+## Keyword arguments
+- `c::Float64=0.5`: Hyperparameter for automatic number of RC-elements determination. Lower values of c promote a higher number of RC elements. 
+- `max_M::Int64=80`: Hyperparameter limiting the possible number of RC-elements of the Voigt circuit model.
+ """
 function linearKK(path,c = 0.5,max_M = 80) #Alternatively: path to csv file.  
     df = CSV.read(path,DataFrame)
     frequencies = df[:,1]
@@ -139,6 +169,16 @@ function linearKK(path,c = 0.5,max_M = 80) #Alternatively: path to csv file.
     return  measurements, frequencies, fitted_spectrum, realres, imres
 end
 
+"""
+    summary_plot(measurements, frequencies, fitted_spectrum, realres, imres)
+
+Visually evaluate the results of a linear Kramers-Kronig data validation.
+
+The inputs are the outputs of the linearKK function, being the processed measurements, frequencies, Voigt-circuit fitted impedance spectrum,
+the real residuals and the imaginary residuals. 
+
+The output is a composite figure displaying the results of the linear Kramers-Kronig analysis.
+ """
 function summary_plot(measurements, frequencies, fitted_spectrum, realres, imres)
     # Spectrum fit
     specfit = scatter(real(measurements),-imag(measurements), label = "measured",markershape=:circle,markercolor=:white)
@@ -168,11 +208,40 @@ function summary_plot(measurements, frequencies, fitted_spectrum, realres, imres
     return summary_fig
 end
 
+"""
+    summary_plot(path,c = 0.5,max_M = 80)
+
+Visually evaluate the results of a linear Kramers-Kronig data validation.
+
+The essential inputs are the path to a set of frequencies and the impedance measurements conducted at those frequencies.
+There are also two of keyword arguments to fine-tune the calculation.
+
+The output is a composite figure displaying the results of the linear Kramers-Kronig analysis.
+
+## Keyword arguments
+- `c::Float64=0.5`: Hyperparameter for automatic number of RC-elements determination. Lower values of c promote a higher number of RC elements. 
+- `max_M::Int64=80`: Hyperparameter limiting the possible number of RC-elements of the Voigt circuit model.
+ """
 function summary_plot(path,c = 0.5,max_M = 80)
     measurements, frequencies, fitted_spectrum, realres, imres = linearKK(path,c,max_M)
     return summary_plot(measurements, frequencies, fitted_spectrum, realres, imres)
 end
 
+
+"""
+    save_valid_measurements(path,measurements,frequencies,threshold = 1, c = 0.5,max_M = 80)
+
+    remove part of EIS measurements that doesn't comply with EIS validity criteria as evaluated by the linear Kramers-Kronig relations and
+    save the resulting impedance spectrum.
+
+    The essential inputs are the path to where the valid part of the measurements should be saved and a set of frequencies and the impedance measurements conducted at those frequencies.
+    There are also two of keyword arguments to fine-tune the calculation.
+
+    ## Keyword arguments
+    - `c::Float64=0.5`: Hyperparameter for automatic number of RC-elements determination. Lower values of c promote a higher number of RC elements. 
+    - `max_M::Int64=80`: Hyperparameter limiting the possible number of RC-elements of the Voigt circuit model.
+    - `threshold::Float64=1`: Threshold percentage under which residuals are considered to be Kramers-Kronig compliant.
+ """
 function save_valid_measurements(path,measurements,frequencies,threshold = 1, c = 0.5,max_M = 80) #remove part of EIS measurements that doesn't comply with linKK
     measurements, frequencies, fitted_spectrum, realres, imres = linearKK(measurements,frequencies,c,max_M)
     thres = threshold*0.01
@@ -183,6 +252,15 @@ function save_valid_measurements(path,measurements,frequencies,threshold = 1, c 
     CSV.write(path,df_valid)
 end
 
+"""
+    save_lin_kk_residuals(path,freqs,real_res,imag_res)
+
+    Save the residuals of the linear Kramers-Kronig test to a CSV file.
+
+    The essential inputs are the path to where the residuals ought to be saved, the frequency values, and the real and imaginary residuals
+    obtained by the linearKK function.
+
+ """
 function save_lin_kk_residuals(path,freqs,real_res,imag_res)
     df = DataFrame(frequecies=freqs,real_residuals = real_res, imag_residuals=imag_res)
     CSV.write(path,df)
